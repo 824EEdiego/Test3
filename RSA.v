@@ -194,8 +194,8 @@ always @(posedge clk or negedge rst_n) begin
             Mi_reg <= Mi;
 
         //初始化 dec_cnt 和 decrypt_result
-        if(state == IDLE && next_state == DECRYPT) begin
-            dec_cnt <= kd;
+        if(state == IDLE && i_valid) begin
+            dec_cnt <= kd;//這代表 第 1 拍剛進入 DECRYPT 時：dec_cnt = 11decrypt_result = 1這拍還沒做乘法，僅初始化而已！
             //decrypt_result <= 1; //雖然重複對decrypt_result 賦值1但因為作用不同所以沒關系
         end /*else if (state == DECRYPT) begin
             dec_cnt <= next_dec_cnt;
@@ -231,13 +231,17 @@ always @(posedge clk or negedge rst_n) begin
         if (dec_cnt == kd) begin
             decrypt_result <= 1;
         end else begin
-            decrypt_result <= next_decrypt_result;
+            decrypt_result <= next_decrypt_result; //下一個 clock 將 decrypt_result 更新為這一拍預先計算好的乘法結果
+            //這是整個 RSA 解密模組的「乘法累積器」，也就是用來計算decrypt_result = M^kd mod N
+            //這邊的 next_decrypt_result 是在 combinational 區中算出來的，也就是：next_decrypt_result = (decrypt_result * Mi_reg) % N;
         end
-        
+
         dec_cnt <= next_dec_cnt; 
 
-        if (dec_cnt == 1)
-            decrypted_msg <= next_decrypt_result;
+        if (dec_cnt == 1) //此時已在計算next_dec_cnt = dec_cnt - 1 算出答案是0，在等待下個posedge來，posedge來之後瞬間跳state
+        //到了 if (dec_cnt == 1) 的那一拍時，你已經做了 10 次乘法，這是第 11 次，剛好要乘完最後一輪，產生Mi^11 mod N
+        //dec_cnt == kd ➜ 初始化;dec_cnt == 1 ➜ 這次是「最後一次乘法」;一共乘了 kd 次
+            decrypted_msg <= next_decrypt_result; //next_decrypt_result = (decrypt_result * Mi_reg) % N;
     end
 end
 
