@@ -114,7 +114,7 @@ always @(*) begin
     case (state)
         DECRYPT: begin
             next_decrypt_result = (decrypt_result * Mi_reg) % N;
-            next_dec_cnt = next_dec_cnt - 1;
+            next_dec_cnt = dec_cnt - 1;
             //若上一輪是set指令，則這筆為目標資料，將其寫進 register
             if (dec_cnt == 1 && wait_set_data) begin
                 next_register = next_decrypt_result;         //(next_dec_result * Mi_reg) % N;解密結果直接存入register
@@ -161,11 +161,12 @@ always @(*) begin
             Mo_r = result;  // 將結果輸出
         end
     endcase
-
+    //combinational 初始化 dec_cnt 的邏輯反覆執行，導致它一直被設回 b;每當 dec_cnt 回到 b（11）時，你又重設一次 → 卡死
+    /*
     if(state == DECRYPT && dec_cnt == kd) begin
         next_decrypt_result = 1;
         next_dec_cnt = kd;
-    end
+    end*/   
 end
 
 //----------------------------------------------------------sequential circuit
@@ -180,6 +181,8 @@ always @(posedge clk or negedge rst_n) begin
         ke <= 0;
         Mi_reg <= 0;
         wait_set_data <= 0;
+        //dec_cnt <= 0; //給初始值
+        //decrypt_result <= 1; //給初始值
     end else begin
         state <= next_state;
         decrypted_msg <= next_decrypted_msg;
@@ -189,6 +192,18 @@ always @(posedge clk or negedge rst_n) begin
         wait_set_data <= next_wait_set_data;
         if (i_valid && state == IDLE)
             Mi_reg <= Mi;
+
+        //初始化 dec_cnt 和 decrypt_result
+        if(state == IDLE && next_state == DECRYPT) begin
+            dec_cnt <= kd;
+            //decrypt_result <= 1; //雖然重複對decrypt_result 賦值1但因為作用不同所以沒關系
+        end /*else if (state == DECRYPT) begin
+            dec_cnt <= next_dec_cnt;
+            decrypt_result <= next_decrypt_result;
+
+            if (dec_cnt == 1)
+                decrypted_msg <= next_decrypt_result;
+        end*/
     end
 end
 
@@ -207,6 +222,27 @@ always @(posedge clk or negedge rst_n) begin
     end
 end
 
+//Decrypt unit
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        dec_cnt <= 0;
+        decrypt_result <= 1; //multiply from 1
+    end else if (state == DECRYPT) begin
+        if (dec_cnt == kd) begin
+            decrypt_result <= 1;
+        end else begin
+            decrypt_result <= next_decrypt_result;
+        end
+        
+        dec_cnt <= next_dec_cnt; 
+
+        if (dec_cnt == 1)
+            decrypted_msg <= next_decrypt_result;
+    end
+end
+
+
+/*
 //Decrypt unit 
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -219,7 +255,7 @@ always @(posedge clk or negedge rst_n) begin
             decrypted_msg <= next_decrypt_result;
     end
 end
-
+*/
 
 
 endmodule
